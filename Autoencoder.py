@@ -214,7 +214,7 @@ for epoch in range(training_epochs):
         batch_x, batch_y = mnist.train.next_batch(batch_size)
         # Run optimization op (backprop) and cost op (to get loss value)
         if (step % encoding_print_step == 0):
-          dec_summy = sess.run(dec_summary, feed_dict={encoding: np.eye(encoding_size)}) # Y is same as X
+          dec_summy = sess.run(dec_summary, feed_dict={encoding: 30*np.eye(encoding_size)}) # Y is same as X
           sum_writer.add_summary(dec_summy, step);
         
         if (step % summy_write_step == 0):
