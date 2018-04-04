@@ -29,7 +29,7 @@ from tensorlayer.layers import *
 # Parameters
 learning_rate = 0.0001
 training_epochs = 50
-batch_size = 20
+batch_size = 8
 display_step = 1
 save_step = 2000
 encoding_print_step = 250
