@@ -28,8 +28,8 @@ from tensorlayer.layers import *
 
 # Parameters
 learning_rate = 0.0001
-training_epochs = 50
-batch_size = 8
+training_epochs = 100
+batch_size = 20
 display_step = 1
 save_step = 2000
 encoding_print_step = 250
@@ -46,7 +46,8 @@ n_input = 784 # MNIST data input (img shape: 28*28)
 # ConvNet Parameters
 
 convolutional = True
-encoding_size = 12
+encoding_size = 25
+max_pics = 25
 
 # Start Session
 sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
@@ -110,7 +111,7 @@ def multilayer_perceptron(x):
     return out_layer
 
 def conv_enc_net(x, is_train=False, reuse=False):
-    with tf.variable_scope("u_net", reuse=reuse):
+    with tf.variable_scope("u_net", reuse=None):
         inputs = InputLayer(x, name='encoder_inputs')
         conv1 = Conv2d(inputs, 4, (3, 3), act=tf.nn.relu, name='conv1_1')
         pool1 = MaxPool2d(conv1, (2, 2), name='pool1')
@@ -124,10 +125,9 @@ def conv_enc_net(x, is_train=False, reuse=False):
         hid3 = DenseLayer(flat3, encoding_size, act = tf.nn.relu, name = 'hidden_encode')
     return hid3
 
-def conv_dec_net(encoded, nx, ny, reuse = False, n_out=1):
-    with tf.variable_scope("u_net", reuse=reuse):
-        inputs = InputLayer(encoded, name="decoder_inputs")
-        hid3 = DenseLayer(inputs, 784, act = tf.nn.relu, name = 'hidden_decode')
+def conv_dec_net(encoded, nx, ny, n_out=1):
+    with tf.variable_scope("u_net", reuse = None):
+        hid3 = DenseLayer(encoded, 784, act = tf.nn.relu, name = 'hidden_decode')
         shape3 = ReshapeLayer(hid3, (-1, 7, 7, 16), name = 'unflatten')
 
         conv3 = Conv2d(shape3, 8, (3, 3), act=tf.nn.relu, name='conv3_2')
@@ -158,14 +158,15 @@ def variable_summaries(var):
 # Construct model
 if(convolutional):
   _, nx, ny, nz = X.get_shape().as_list()
-  encoding = conv_enc_net(X).outputs
-  variable_summaries(encoding)
+  encoding = conv_enc_net(X, reuse = False)
+  enc_outs = encoding.outputs
+  variable_summaries(enc_outs)
   f = conv_dec_net(encoding, nx, ny).outputs
 
   #Output Summary
   f_255 = tf.image.convert_image_dtype (f, dtype=tf.uint8)
   out_summary = tf.summary.image('output', f_255, max_outputs = 3)
-  dec_summary = tf.summary.image('decoding', f_255, max_outputs = encoding_size)
+  dec_summary = tf.summary.image('decoding', f_255, max_outputs = max_pics)
 
   ## Encoding Testing and Summary
   """test_tensor = tf.eye(encoding_size)
@@ -184,23 +185,22 @@ else:
 
 
 # Define loss and optimizer
-loss_op = tf.losses.mean_squared_error(
-    predictions = f, labels=X) #Scale this by # of weights
+loss_op = tf.reduce_mean(tf.squared_difference(f, X)) #Scale this by # of weights
 tf.summary.scalar("loss", loss_op);
 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 train_op = optimizer.minimize(loss_op)
 
 # Summaries for tensorboard
 merged = tf.summary.merge_all()
-sum_writer = tf.summary.FileWriter("logs", sess.graph)
+sum_writer = tf.summary.FileWriter("logs2", sess.graph)
 saver = tf.train.Saver()
 
 # Initializing the variables
 init = tf.global_variables_initializer()
 
 sess.run(init)
-saver.save(sess, './Model/Mnist-Encoding')
-saver.save(sess, './Model/Mnist-Encoding', global_step=save_step, write_meta_graph=False)
+saver.save(sess, './Model2/Mnist-Encoding')
+saver.save(sess, './Model2/Mnist-Encoding', global_step=save_step, write_meta_graph=False)
 
 step = 0;
 
@@ -214,7 +214,7 @@ for epoch in range(training_epochs):
         batch_x, batch_y = mnist.train.next_batch(batch_size)
         # Run optimization op (backprop) and cost op (to get loss value)
         if (step % encoding_print_step == 0):
-          dec_summy = sess.run(dec_summary, feed_dict={encoding: 30*np.eye(encoding_size)}) # Y is same as X
+          dec_summy = sess.run(dec_summary, feed_dict={encoding.outputs: 30*np.eye(encoding_size)}) # Y is same as X
           sum_writer.add_summary(dec_summy, step);
         
         if (step % summy_write_step == 0):
