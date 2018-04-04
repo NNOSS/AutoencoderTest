@@ -30,7 +30,7 @@ with tf.Session() as sess:
 		except:
 			continue
 		test = np.zeros(25)
-		test[in_ind] = 1;
+		test[in_ind] = 30;
 		test = np.expand_dims(test, axis=0)
 		feed_dict = {decoder_in: test}
 		out = sess.run(final,feed_dict)
