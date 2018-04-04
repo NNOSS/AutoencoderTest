@@ -31,12 +31,17 @@ learning_rate = 0.0001
 training_epochs = 50
 batch_size = 20
 display_step = 1
+save_step = 2000
+encoding_print_step = 250
+summy_write_step = 25
+
+img_w = 28
+img_h = 28
 
 # Network Parameters
 n_hidden_1 = 25 # 1st layer number of neurons
 #n_hidden_2 = 256 # 2nd layer number of neurons
 n_input = 784 # MNIST data input (img shape: 28*28)
-n_input = 784 # MNIST total classes (0-9 digits)
 
 # ConvNet Parameters
 
@@ -121,7 +126,7 @@ def conv_enc_net(x, is_train=False, reuse=False):
 
 def conv_dec_net(encoded, nx, ny, reuse = False, n_out=1):
     with tf.variable_scope("u_net", reuse=reuse):
-	inputs = InputLayer(encoded, name="decoder_inputs")
+        inputs = InputLayer(encoded, name="decoder_inputs")
         hid3 = DenseLayer(inputs, 784, act = tf.nn.relu, name = 'hidden_decode')
         shape3 = ReshapeLayer(hid3, (-1, 7, 7, 16), name = 'unflatten')
 
@@ -137,16 +142,41 @@ def conv_dec_net(encoded, nx, ny, reuse = False, n_out=1):
     return conv1
 
 
+def variable_summaries(var):
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope('summaries'):
+    mean = tf.reduce_mean(var)
+    tf.summary.scalar('mean', mean)
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    tf.summary.scalar('stddev', stddev)
+    tf.summary.scalar('max', tf.reduce_max(var))
+    tf.summary.scalar('min', tf.reduce_min(var))
+    tf.summary.histogram('histogram', var)
+
+
 # Construct model
 if(convolutional):
   _, nx, ny, nz = X.get_shape().as_list()
   encoding = conv_enc_net(X).outputs
+  variable_summaries(encoding)
   f = conv_dec_net(encoding, nx, ny).outputs
+
+  #Output Summary
   f_255 = tf.image.convert_image_dtype (f, dtype=tf.uint8)
-  tf.summary.image('output', f_255, max_outputs = 3)
+  out_summary = tf.summary.image('output', f_255, max_outputs = 3)
+  dec_summary = tf.summary.image('decoding', f_255, max_outputs = encoding_size)
+
+  ## Encoding Testing and Summary
+  """test_tensor = tf.eye(encoding_size)
+  dec_test = conv_dec_net(test_tensor, img_h, img_w)
+  dec_255 = tf.image.convert_image_dtype (dec_test, dtype=tf.uint8)
+  out_summary = tf.summary.image('dec_test', dec_255, max_outputs = encoding_size)"""
+
+
 else:
   f = multilayer_perceptron(X)
-  f_s = tf.reshape(f, [-1, 28,28,1])
+  f_s = tf.reshape(f, [-1, img_h, img_w,1])
   # to tf.image_summary format [batch_size, height, width, channels]
   f_255 = tf.image.convert_image_dtype (f_s, dtype=tf.uint8)
   #f_t = tf.transpose (f_255, [3, 0, 1, 2])
@@ -163,11 +193,14 @@ train_op = optimizer.minimize(loss_op)
 # Summaries for tensorboard
 merged = tf.summary.merge_all()
 sum_writer = tf.summary.FileWriter("logs", sess.graph)
+saver = tf.train.Saver()
 
 # Initializing the variables
 init = tf.global_variables_initializer()
 
 sess.run(init)
+saver.save(sess, './Model/Mnist-Encoding')
+saver.save(sess, './Model/Mnist-Encoding', global_step=save_step, write_meta_graph=False)
 
 step = 0;
 
@@ -180,12 +213,19 @@ for epoch in range(training_epochs):
     for i in range(total_batch):
         batch_x, batch_y = mnist.train.next_batch(batch_size)
         # Run optimization op (backprop) and cost op (to get loss value)
-        _, c, summy = sess.run([train_op, loss_op, merged], feed_dict={X_pre: batch_x}) # Y is same as X
+        if (step % encoding_print_step == 0):
+          dec_summy = sess.run(dec_summary, feed_dict={encoding: np.eye(encoding_size)}) # Y is same as X
+          sum_writer.add_summary(dec_summy, step);
         
+        if (step % summy_write_step == 0):
+          _, c, summy = sess.run([train_op, loss_op, merged], feed_dict={X_pre: batch_x}) # Y is same as X
+          sum_writer.add_summary(summy, step);
+        else:
+          _, c = sess.run([train_op, loss_op], feed_dict={X_pre: batch_x}) # Y is same as X
         # Compute average loss
         avg_cost += c / total_batch
+
         step += 1;
-        sum_writer.add_summary(summy, step);
     # Display logs per epoch step
     if epoch % display_step == 0:
         print("Epoch:", '%04d' % (epoch+1), "cost={:.9f}".format(avg_cost))
